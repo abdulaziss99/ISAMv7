@@ -708,9 +708,14 @@ body{padding-bottom:var(--nav-h)}
           text-decoration:none;display:inline-flex;align-items:center;gap:6px"> 📷 QR Generator
         </a>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:10px">
-      <input type="text" id="searchAsset" placeholder="🔍 Cari nama, no ID, area..." oninput="applyAssetFilter()"
-        style="flex:1;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;font-family:'Inter',sans-serif;background:var(--surface);outline:none;color:var(--text)">
+    <div style="position:relative;margin-bottom:10px">
+      <input type="text" id="searchAsset" placeholder="🔍 Cari nama alat, no ID, area, merk..."
+        oninput="applyAssetFilter();showAssetSuggestions(this.value)"
+        onkeydown="handleAssetSearchKey(event)"
+        onfocus="showAssetSuggestions(this.value)"
+        autocomplete="off"
+        style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;font-family:'Inter',sans-serif;background:var(--surface);outline:none;color:var(--text)">
+      <div id="assetSuggestions" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1.5px solid var(--primary);border-radius:10px;z-index:50;box-shadow:0 8px 24px rgba(27,79,216,.15);max-height:220px;overflow-y:auto"></div>
     </div>
     <div class="chips" style="margin-bottom:8px">
       <div class="chip active" onclick="setAssetFilter('semua',this)">Semua <span id="chipCountSemua"></span></div>
@@ -2042,17 +2047,13 @@ function renderAssetNamaChips() {
   const el = document.getElementById('assetNamaChips');
   if (!el) return;
 
-  // Kumpulin semua kata pertama dari nama_alat (misal "Bor", "Toolbox", dll)
-  // lalu tambah nama_kategori jika ada
+  // Gunakan kata pertama nama_alat sebagai jenis (bor, compressor, toolbox, dll)
   const countMap = {};
   assetsRaw.forEach(a => {
-    // Pakai nama_kategori kalau ada, fallback ke kata pertama nama_alat
-    const cat = (a.nama_kategori && a.nama_kategori.trim())
-      ? a.nama_kategori.trim()
-      : (a.nama_alat||'').trim().split(' ')[0];
-    if (!cat) return;
-    const key = cat.toLowerCase();
-    if (!countMap[key]) countMap[key] = { label: cat, count: 0 };
+    const jenisRaw = (a.nama_alat||'').trim().split(' ')[0];
+    if (!jenisRaw) return;
+    const key = jenisRaw.toLowerCase();
+    if (!countMap[key]) countMap[key] = { label: jenisRaw, count: 0 };
     countMap[key].count++;
   });
 
@@ -2129,13 +2130,11 @@ function applyAssetFilter() {
     filtered = filtered.filter(a => a.tgl_inspeksi_due && a.tgl_inspeksi_due < today);
   }
 
-  // Nama/kategori chip filter
+  // Jenis alat chip filter (kata pertama nama_alat)
   if (assetNamaFilter) {
     filtered = filtered.filter(a => {
-      const cat = (a.nama_kategori && a.nama_kategori.trim())
-        ? a.nama_kategori.trim().toLowerCase()
-        : (a.nama_alat||'').trim().split(' ')[0].toLowerCase();
-      return cat === assetNamaFilter;
+      const jenis = (a.nama_alat||'').trim().split(' ')[0].toLowerCase();
+      return jenis === assetNamaFilter;
     });
   }
 
@@ -2175,6 +2174,113 @@ function applyAssetFilter() {
 
   renderAssetList(filtered);
 }
+
+
+// ════════════════════════════════════════════════════════════
+//  ASSET SEARCH SUGGESTIONS
+// ════════════════════════════════════════════════════════════
+let assetSuggestionIndex = -1;
+
+function showAssetSuggestions(q) {
+  const box = document.getElementById('assetSuggestions');
+  if (!box) return;
+  const val = (q||'').toLowerCase().trim();
+
+  if (!val) { box.style.display='none'; return; }
+
+  // Kumpulin kandidat: nama_alat, merk, nama_subarea, asset_id, no_id
+  const seen = new Set();
+  const results = [];
+  assetsRaw.forEach(a => {
+    const fields = [
+      { text: a.nama_alat, icon: '🔧', sub: a.nama_subarea },
+      { text: a.merk,      icon: '🏷️', sub: 'Merk' },
+      { text: a.no_id,     icon: '🔢', sub: 'No ID' },
+      { text: a.nama_subarea, icon: '📍', sub: 'Area' },
+    ];
+    fields.forEach(f => {
+      if (!f.text) return;
+      const t = f.text.trim();
+      const key = t.toLowerCase();
+      if (!key.includes(val) || seen.has(key)) return;
+      seen.add(key);
+      // Highlight matched part
+      const idx = key.indexOf(val);
+      const highlighted = t.slice(0,idx) + '<strong style="color:var(--primary)">' + t.slice(idx, idx+val.length) + '</strong>' + t.slice(idx+val.length);
+      results.push({ icon: f.icon, highlighted, plain: t, sub: f.sub });
+    });
+  });
+
+  if (!results.length) { box.style.display='none'; return; }
+
+  assetSuggestionIndex = -1;
+  box.innerHTML = results.slice(0,8).map((r,i) =>
+    `<div class="asset-sug-item" data-idx="${i}" data-val="${r.plain.replace(/"/g,'&quot;')}"
+      onmousedown="pickAssetSuggestion('${r.plain.replace(/'/g,"\'")}')"
+      onmouseover="highlightSugItem(${i})"
+      style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);font-size:13px">
+      <span style="font-size:15px">${r.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.highlighted}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:1px">${r.sub||''}</div>
+      </div>
+    </div>`
+  ).join('');
+
+  // Remove border from last item
+  const items = box.querySelectorAll('.asset-sug-item');
+  if (items.length) items[items.length-1].style.borderBottom = 'none';
+
+  box.style.display = 'block';
+}
+
+function highlightSugItem(idx) {
+  assetSuggestionIndex = idx;
+  document.querySelectorAll('.asset-sug-item').forEach((el,i) => {
+    el.style.background = i===idx ? 'var(--primary-light)' : '';
+  });
+}
+
+function pickAssetSuggestion(val) {
+  const input = document.getElementById('searchAsset');
+  if (input) { input.value = val; }
+  document.getElementById('assetSuggestions').style.display = 'none';
+  applyAssetFilter();
+}
+
+function handleAssetSearchKey(e) {
+  const box = document.getElementById('assetSuggestions');
+  const items = document.querySelectorAll('.asset-sug-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    assetSuggestionIndex = Math.min(assetSuggestionIndex+1, items.length-1);
+    highlightSugItem(assetSuggestionIndex);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    assetSuggestionIndex = Math.max(assetSuggestionIndex-1, 0);
+    highlightSugItem(assetSuggestionIndex);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (assetSuggestionIndex >= 0 && items[assetSuggestionIndex]) {
+      pickAssetSuggestion(items[assetSuggestionIndex].dataset.val);
+    } else {
+      box.style.display = 'none';
+      applyAssetFilter();
+    }
+  } else if (e.key === 'Escape') {
+    box.style.display = 'none';
+  }
+}
+
+// Tutup suggestions kalau klik di luar
+document.addEventListener('click', function(e) {
+  const box = document.getElementById('assetSuggestions');
+  const input = document.getElementById('searchAsset');
+  if (box && input && !box.contains(e.target) && e.target !== input) {
+    box.style.display = 'none';
+  }
+});
 
 function searchAssets(q) { applyAssetFilter(); }
 
