@@ -738,6 +738,24 @@ body{padding-bottom:var(--nav-h)}
     <div id="assetList"></div>
   </div>
 
+  <!-- ADMIN: MONITORING SARANA -->
+<div class="view" id="viewAdminSarana">
+  <div style="position:relative;margin-bottom:10px">
+    <input type="text" id="searchSarana" placeholder="🔍 Cari nama sarana, PIC, area..."
+      oninput="applySaranaFilter()" autocomplete="off"
+      style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;font-size:14px;font-family:'Inter',sans-serif;background:var(--surface);outline:none;color:var(--text)">
+  </div>
+  <div class="chips" style="margin-bottom:10px">
+    <div class="chip active" onclick="setSaranaAreaFilter('',this)">Semua Area</div>
+    <div id="saranaAreaChips" style="display:contents"></div>
+  </div>
+  <div class="sec-hdr" style="margin-bottom:8px">
+    <div class="sec-title">Daftar Sarana</div>
+    <div class="sec-count" id="saranaCount">0</div>
+  </div>
+  <div id="saranaList"></div>
+</div>
+
   <!-- ADMIN ACTIVITY LOG -->
   <div class="view" id="viewAdminActLog">
     <div id="actLogList"><div class="skel" style="height:60px;margin-bottom:8px"></div><div class="skel" style="height:60px;margin-bottom:8px"></div><div class="skel" style="height:60px"></div></div>
@@ -906,6 +924,7 @@ function triggerView(view, bnavEl, snavId) {
     adminAnalytics:'viewAdminAnalytics', adminKPIArea:'viewAdminKPIArea',
     adminKPIPIC:'viewAdminKPIPIC', adminAsset:'viewAdminAsset',
     adminActLog:'viewAdminActLog', adminMaster:'viewAdminMaster',
+    adminSarana:'viewAdminSarana',
   };
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   const vEl = document.getElementById(viewMap[view]||'viewHome');
@@ -923,6 +942,7 @@ function triggerView(view, bnavEl, snavId) {
     adminAnalytics:'Analytics & KPI', adminKPIArea:'KPI per Area',
     adminKPIPIC:'KPI per PIC', adminAsset:'Asset Monitoring',
     adminActLog:'Activity Log', adminMaster:'Master Data',
+    adminSarana:'Monitoring Sarana',
   };
   document.getElementById('topbarTitle').textContent = titles[view]||'Dashboard';
   window.scrollTo({top:0,behavior:'smooth'});
@@ -938,6 +958,7 @@ function triggerView(view, bnavEl, snavId) {
   if (view==='adminActLog') { loadActLog(false); }
   if (view==='adminTemuan') renderAdminTemuan();
   if (view==='adminMaster') loadMasterSheet(masterSheetActive, masterKeyCol);
+  if (view==='adminSarana') renderSaranaList();
   if (view==='notif') loadNotif();
 }
 
@@ -1665,6 +1686,7 @@ const NAV_ADMIN_SIDEBAR = [
   {id:'kpiarea',   icon:'🗺️', label:'KPI Area',           view:'adminKPIArea'},
   {id:'kpipic',    icon:'👥', label:'KPI PIC',            view:'adminKPIPIC'},
   {id:'asset',     icon:'🔧', label:'Asset Monitoring',   view:'adminAsset'},
+  {id:'sarana',   icon:'📏', label:'Monitoring Sarana',  view:'adminSarana'},
   {id:'jadwal2',   icon:'📅', label:'Jadwal Inspeksi',    view:'jadwal'},
   {id:'actlog',    icon:'📋', label:'Activity Log',       view:'adminActLog'},
   {section:'Master Data'},
@@ -2550,6 +2572,9 @@ const MASTER_FIELDS = {
   {key:'area_id',         label:'Area *',          type:'select_master', source:'area',        required:true},
   {key:'subarea_id',      label:'Sub Area *',      type:'select_master', source:'subarea',     required:true},
   {key:'kategori_id',     label:'Kategori *',      type:'select_master', source:'kategori',    required:true},
+  {key:'tinggi_cm',       label:'Tinggi (cm)',     type:'number'},
+  {key:'berat_kg',        label:'Berat (kg)',      type:'number'},
+  {key:'pic_nik',         label:'PIC (NIK)',       type:'text'},
   {key:'status_aset_terakhir', label:'Status',     type:'select', options:['LAYAK','TIDAK LAYAK']},
   {key:'aktif',           label:'Aktif',           type:'select', options:['Y','N']},
 ],
@@ -2816,6 +2841,72 @@ window.addEventListener('appinstalled', () => {
   const btn = document.getElementById('pwaInstallBtn');
   if (btn) btn.style.display = 'none';
 });
+
+// ════════════════════════════════════════════════════════════
+//  MONITORING SARANA (pakai data assetsRaw dari MASTER_ASSET)
+// ════════════════════════════════════════════════════════════
+let saranaAreaFilter = '';
+
+function buildSaranaAreaChips() {
+  const el = document.getElementById('saranaAreaChips');
+  if (!el) return;
+  const areas = [...new Set(assetsRaw.map(a=>a.nama_subarea).filter(Boolean))].sort();
+  el.innerHTML = areas.map(a =>
+    `<div class="chip ${saranaAreaFilter===a?'active':''}" onclick="setSaranaAreaFilter('${a.replace(/'/g,"\\'")}',this)">${a}</div>`
+  ).join('');
+}
+
+function setSaranaAreaFilter(area, chipEl) {
+  saranaAreaFilter = area;
+  document.querySelectorAll('#viewAdminSarana .chip').forEach(c=>c.classList.remove('active'));
+  if (chipEl) chipEl.classList.add('active');
+  applySaranaFilter();
+}
+
+function applySaranaFilter() {
+  if (!document.getElementById('saranaAreaChips').innerHTML) buildSaranaAreaChips();
+  const q = (document.getElementById('searchSarana')?.value || '').toLowerCase().trim();
+  let data = [...assetsRaw];
+  if (saranaAreaFilter) data = data.filter(a => a.nama_subarea === saranaAreaFilter);
+  if (q) {
+    data = data.filter(a =>
+      (a.nama_alat||'').toLowerCase().includes(q) ||
+      (getNamaEmployee(a.pic_nik)||'').toLowerCase().includes(q) ||
+      (a.nama_subarea||'').toLowerCase().includes(q) ||
+      (a.asset_id||'').toLowerCase().includes(q)
+    );
+  }
+  renderSaranaList(data);
+}
+
+function renderSaranaList(data) {
+  if (!data) {
+    buildSaranaAreaChips();
+    data = [...assetsRaw];
+    if (saranaAreaFilter) data = data.filter(a => a.nama_subarea === saranaAreaFilter);
+  }
+  const el = document.getElementById('saranaList');
+  const cnt = document.getElementById('saranaCount');
+  if (cnt) cnt.textContent = data.length;
+  if (!el) return;
+  if (!data.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">📏</div><div class="empty-title">Belum ada data sarana</div></div>'; return; }
+  el.innerHTML = data.map(a => {
+    const tinggi = a.tinggi_cm ? a.tinggi_cm + ' cm' : '—';
+    const berat  = a.berat_kg ? a.berat_kg + ' kg' : '—';
+    const pic    = a.pic_nik ? getNamaEmployee(a.pic_nik) : '—';
+    return `<div style="background:var(--surface);border-radius:10px;border:1px solid var(--border);padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:2px">${a.nama_alat||'-'}</div>
+      <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:8px">🪪 ${a.asset_id||'-'}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="font-size:11px;color:var(--muted)">📏 Tinggi: <strong>${tinggi}</strong></div>
+        <div style="font-size:11px;color:var(--muted)">⚖️ Berat: <strong>${berat}</strong></div>
+        <div style="font-size:11px;color:var(--muted)">👤 PIC: <strong>${pic}</strong></div>
+        <div style="font-size:11px;color:var(--muted)">📍 Area: <strong>${a.nama_subarea||'-'}</strong></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+  
 </script>
 </body>
 </html>
