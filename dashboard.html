@@ -537,6 +537,59 @@ body{padding-bottom:var(--nav-h)}
     </div>
     <div class="sec-hdr" style="margin-bottom:10px"><div class="sec-title">Top 5 Area Overdue</div></div>
     <div id="top5List"></div>
+    <!-- ═══ ASSET MONITORING VIEWER ═══ -->
+<!-- TARUH INI TEPAT SETELAH: <div id="top5List"></div> -->
+<!-- DAN SEBELUM: </div>  (penutup viewVMonitoring) -->
+
+<div style="margin-top:20px">
+  <div class="sec-hdr" style="margin-bottom:10px">
+    <div class="sec-title">🔧 Asset Monitoring</div>
+    <div style="font-size:12px;color:var(--muted)" id="vAssetCount">Memuat...</div>
+  </div>
+
+  <div class="stats-grid" style="margin-bottom:12px">
+    <div class="stat-card c-blue">
+      <div class="stat-icon c-blue">🔧</div>
+      <div class="stat-value c-blue" id="vAssetTotal">—</div>
+      <div class="stat-label">Total Asset</div>
+    </div>
+    <div class="stat-card c-green">
+      <div class="stat-icon c-green">✅</div>
+      <div class="stat-value c-green" id="vAssetLayak">—</div>
+      <div class="stat-label">Layak</div>
+    </div>
+    <div class="stat-card c-red">
+      <div class="stat-icon c-red">❌</div>
+      <div class="stat-value c-red" id="vAssetTidakLayak">—</div>
+      <div class="stat-label">Tidak Layak</div>
+    </div>
+    <div class="stat-card c-yellow">
+      <div class="stat-icon c-yellow">⏰</div>
+      <div class="stat-value c-yellow" id="vAssetOverdue">—</div>
+      <div class="stat-label">Perlu Inspeksi</div>
+    </div>
+  </div>
+
+  <div class="chips" id="vAssetChips">
+    <div class="chip active" onclick="vSetAssetFilter('semua',this)">Semua</div>
+    <div class="chip" onclick="vSetAssetFilter('tidak_layak',this)">❌ Tidak Layak</div>
+    <div class="chip" onclick="vSetAssetFilter('perlu_inspeksi',this)">⏰ Perlu Inspeksi</div>
+    <div class="chip" onclick="vSetAssetFilter('sertifikasi',this)">📋 Sertifikasi</div>
+    <div class="chip" onclick="vSetAssetFilter('layak',this)">✅ Layak</div>
+  </div>
+
+  <input type="text" id="vSearchAsset" placeholder="🔍 Cari nama alat, no ID, area..."
+    oninput="vApplyAssetFilter()"
+    style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:10px 14px;
+           font-size:14px;font-family:'Inter',sans-serif;background:var(--surface);
+           outline:none;color:var(--text);margin-bottom:12px">
+
+  <div id="vAssetList">
+    <div class="skel" style="height:80px;margin-bottom:10px"></div>
+    <div class="skel" style="height:80px;margin-bottom:10px"></div>
+    <div class="skel" style="height:80px"></div>
+  </div>
+</div>
   </div>
 
   <!-- VIEWER: ANALYTICS -->
@@ -816,6 +869,31 @@ body{padding-bottom:var(--nav-h)}
 <!-- BOTTOM NAV (mobile) -->
 <nav class="bnav" id="bnav"></nav>
 
+<!-- ═══ DRAWER ASSET VIEWER ═══ -->
+<!-- TARUH INI SEBELUM: </body> (paling bawah sebelum tag body tutup) -->
+
+<div class="drawer-bg" id="vAssetDrawerBg" onclick="vCloseAssetDrawer()" style="z-index:300;display:none"></div>
+<div id="vAssetDrawer" style="
+  position:fixed;bottom:0;left:0;right:0;
+  background:var(--surface);border-radius:20px 20px 0 0;
+  z-index:301;max-height:92vh;overflow-y:auto;display:none;
+  transform:translateY(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);
+  padding-bottom:calc(env(safe-area-inset-bottom)+16px)">
+  <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0"></div>
+  <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;
+              align-items:center;gap:10px;position:sticky;top:0;background:var(--surface);z-index:1">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;
+                  letter-spacing:.3px" id="vDrawerAssetId">—</div>
+      <div style="font-size:15px;font-weight:700" id="vDrawerAssetName">Detail Asset</div>
+    </div>
+    <button onclick="vCloseAssetDrawer()" style="width:30px;height:30px;border-radius:50%;
+            background:var(--surface2);border:none;cursor:pointer;font-size:14px;
+            display:flex;align-items:center;justify-content:center;color:var(--muted)">✕</button>
+  </div>
+  <div style="padding:16px 20px" id="vDrawerBody"></div>
+</div>
+
 <script>
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxXYIMZh1r63PBehuExXDXJ8NqAHrJ5AwhivLGh5XcFYD61TTNCo_YWS5j2HLIczJur0Q/exec';
 let SESSION=null, allTemuan=[], closeFotos=[], activeInsId=null, currentFilter='open';
@@ -1066,7 +1144,7 @@ async function loadData() {
   loadJadwal();
   const role = (SESSION.role||'').toUpperCase();
   if (role==='ADMIN') renderAdminMonitoring();
-  if (role==='VIEWER') renderVMonitoring();
+  if (role === 'VIEWER') { renderVMonitoring(); loadVAsset(); }
 }
 
 function getFiltered(filter) {
@@ -2815,6 +2893,347 @@ function getDemoActLog() {
 
 </script>
 <script>
+
+// ═══════════════════════════════════════════════════════════
+//  VIEWER — ASSET MONITORING
+//  TARUH INI di dalam <script> yang sudah ada,
+//  SEBELUM baris: if ("serviceWorker" in navigator) {
+// ═══════════════════════════════════════════════════════════
+
+let vAssetsRaw = [];
+let vAssetStatusFilter = 'semua';
+
+async function loadVAsset() {
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        action: 'crudMaster',
+        action_type: 'READ_ASSET',
+        caller_nik: SESSION.nik || 'SYSTEM'
+      })
+    });
+    const json = await res.json();
+    if (json.status === 'ok') {
+      vAssetsRaw = json.data.assets || [];
+      vRenderAssetStats(json.data);
+    } else {
+      vAssetsRaw = getDemoAssets();
+      vRenderAssetStatsFallback();
+    }
+  } catch (e) {
+    vAssetsRaw = getDemoAssets();
+    vRenderAssetStatsFallback();
+  }
+  vApplyAssetFilter();
+}
+
+function vRenderAssetStatsFallback() {
+  const today = new Date().toISOString().split('T')[0];
+  vRenderAssetStats({
+    total: vAssetsRaw.length,
+    layak: vAssetsRaw.filter(a => a.status_aset_terakhir === 'LAYAK').length,
+    tidak_layak: vAssetsRaw.filter(a => a.status_aset_terakhir === 'TIDAK LAYAK').length
+  });
+}
+
+function vRenderAssetStats(d) {
+  const today = new Date().toISOString().split('T')[0];
+  const overdue = vAssetsRaw.filter(a => a.tgl_inspeksi_due && a.tgl_inspeksi_due < today).length;
+  [
+    ['vAssetTotal', d.total || vAssetsRaw.length || 0],
+    ['vAssetLayak', d.layak || 0],
+    ['vAssetTidakLayak', d.tidak_layak || 0],
+    ['vAssetOverdue', overdue]
+  ].forEach(([id, val]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  });
+}
+
+function vSetAssetFilter(filter, chipEl) {
+  vAssetStatusFilter = filter;
+  document.querySelectorAll('#vAssetChips .chip').forEach(c => c.classList.remove('active'));
+  if (chipEl) chipEl.classList.add('active');
+  vApplyAssetFilter();
+}
+
+function vApplyAssetFilter() {
+  const q = (document.getElementById('vSearchAsset')?.value || '').toLowerCase().trim();
+  const today = new Date().toISOString().split('T')[0];
+  let data = [...vAssetsRaw];
+
+  if (vAssetStatusFilter === 'layak')
+    data = data.filter(a => a.status_aset_terakhir === 'LAYAK');
+  else if (vAssetStatusFilter === 'tidak_layak')
+    data = data.filter(a => a.status_aset_terakhir === 'TIDAK LAYAK');
+  else if (vAssetStatusFilter === 'perlu_inspeksi')
+    data = data.filter(a => a.tgl_inspeksi_due && a.tgl_inspeksi_due < today);
+  else if (vAssetStatusFilter === 'sertifikasi')
+    data = data.filter(a => a.tanggal_expired && String(a.tanggal_expired).trim() !== '');
+
+  if (q) {
+    data = data.filter(a =>
+      (a.nama_alat || '').toLowerCase().includes(q) ||
+      (a.no_id || '').toLowerCase().includes(q) ||
+      (a.asset_id || '').toLowerCase().includes(q) ||
+      (a.nama_subarea || '').toLowerCase().includes(q) ||
+      (a.merk || '').toLowerCase().includes(q)
+    );
+  }
+
+  const cnt = document.getElementById('vAssetCount');
+  if (cnt) cnt.textContent = 'Menampilkan ' + data.length + ' asset';
+  vRenderAssetList(data);
+}
+
+function vRenderAssetList(assets) {
+  const el = document.getElementById('vAssetList');
+  if (!el) return;
+  if (!assets.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-title">Tidak ada asset</div><div class="empty-sub">Coba ubah filter pencarian.</div></div>';
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
+
+  el.innerHTML = assets.map(a => {
+    const isLayak = a.status_aset_terakhir === 'LAYAK';
+    const isOverdue = a.tgl_inspeksi_due && a.tgl_inspeksi_due < todayStr;
+
+    let nextLabel = '—', nextColor = 'var(--muted)';
+    if (a.tgl_inspeksi_due) {
+      const due = new Date(a.tgl_inspeksi_due);
+      due.setHours(0, 0, 0, 0);
+      const diff = Math.ceil((due - today) / 86400000);
+      if (diff < 0) { nextLabel = '🚨 Overdue ' + Math.abs(diff) + ' hari'; nextColor = 'var(--red)'; }
+      else if (diff === 0) { nextLabel = '⏰ Due hari ini!'; nextColor = 'var(--yellow)'; }
+      else if (diff <= 7) { nextLabel = '⏰ ' + diff + ' hari lagi'; nextColor = 'var(--yellow)'; }
+      else { nextLabel = '✅ ' + diff + ' hari lagi'; nextColor = 'var(--green)'; }
+    }
+
+    let sertLabel = '', sertColor = '';
+    if (a.tanggal_expired) {
+      const exp = new Date(a.tanggal_expired);
+      const diffS = Math.ceil((exp - today) / 86400000);
+      if (diffS < 0) { sertLabel = '🔴 Sertifikasi Expired'; sertColor = 'var(--red)'; }
+      else if (diffS <= 60) { sertLabel = '🟡 Sertifikasi ≤60 hari'; sertColor = 'var(--yellow)'; }
+    }
+
+    const borderLeft = !isLayak ? '4px solid var(--red)' :
+                       isOverdue ? '4px solid var(--yellow)' :
+                       '4px solid var(--green)';
+
+    return `<div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);
+              border-left:${borderLeft};margin-bottom:10px;overflow:hidden;cursor:pointer;transition:all .15s"
+              onclick="vOpenAssetDrawer('${a.asset_id}')"
+              onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.1)'"
+              onmouseout="this.style.boxShadow=''">
+        <div style="padding:12px 14px;display:flex;gap:12px;align-items:center">
+          <div style="width:40px;height:40px;border-radius:10px;background:var(--primary-light);
+                      display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔧</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:700;margin-bottom:2px;white-space:nowrap;
+                        overflow:hidden;text-overflow:ellipsis">${a.nama_alat || '—'}</div>
+            <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:2px">
+              🪪 ${a.asset_id || '—'}</div>
+            <div style="font-size:12px;color:var(--muted)">
+              📍 ${a.nama_subarea || '—'} &nbsp;·&nbsp; 🗂️ ${a.nama_kategori || '—'}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            <span style="padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;
+              ${isLayak ? 'background:var(--green-bg);color:var(--green)' : 'background:var(--red-bg);color:var(--red)'}">
+              ${isLayak ? '✅ LAYAK' : '❌ TIDAK LAYAK'}</span>
+            <span style="font-size:11px;font-weight:600;color:${nextColor}">${nextLabel}</span>
+            ${sertLabel ? `<span style="font-size:10px;font-weight:600;color:${sertColor}">${sertLabel}</span>` : ''}
+          </div>
+        </div>
+        <div style="padding:4px 14px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">
+            📅 Inspeksi terakhir: <strong>${a.tgl_inspeksi_terakhir ? formatTgl(a.tgl_inspeksi_terakhir, false) : 'Belum pernah'}</strong>
+          </span>
+          ${a.merk ? `<span style="font-size:11px;color:var(--muted)">· 🏷️ ${a.merk}</span>` : ''}
+          <span style="font-size:11px;color:var(--primary);font-weight:600;margin-left:auto">Lihat detail →</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function vOpenAssetDrawer(assetId) {
+  const a = vAssetsRaw.find(x => x.asset_id === assetId);
+  if (!a) return;
+
+  document.getElementById('vDrawerAssetId').textContent = a.asset_id;
+  document.getElementById('vDrawerAssetName').textContent = a.nama_alat || '—';
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Progress bar inspeksi
+  let nextInspLabel = '—', nextInspColor = 'var(--muted)', pct = 0;
+  if (a.tgl_inspeksi_due) {
+    const due = new Date(a.tgl_inspeksi_due);
+    due.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((due - today) / 86400000);
+    if (a.tgl_inspeksi_terakhir) {
+      const last = new Date(a.tgl_inspeksi_terakhir);
+      last.setHours(0, 0, 0, 0);
+      const total = Math.ceil((due - last) / 86400000) || 1;
+      const elapsed = Math.ceil((today - last) / 86400000);
+      pct = Math.min(100, Math.round((elapsed / total) * 100));
+    } else {
+      pct = diff < 0 ? 100 : 50;
+    }
+    if (diff < 0) { nextInspLabel = '🚨 Overdue ' + Math.abs(diff) + ' hari'; nextInspColor = 'var(--red)'; }
+    else if (diff === 0) { nextInspLabel = '⏰ Due hari ini!'; nextInspColor = 'var(--yellow)'; }
+    else if (diff <= 7) { nextInspLabel = '⏰ ' + diff + ' hari lagi (' + formatTgl(a.tgl_inspeksi_due, false) + ')'; nextInspColor = 'var(--yellow)'; }
+    else { nextInspLabel = '✅ ' + diff + ' hari lagi (' + formatTgl(a.tgl_inspeksi_due, false) + ')'; nextInspColor = 'var(--green)'; }
+  }
+  const barBgMap = { 'var(--red)': 'var(--red-bg)', 'var(--yellow)': 'var(--yellow-bg)', 'var(--green)': 'var(--green-bg)', 'var(--muted)': 'var(--surface2)' };
+  const barBdMap = { 'var(--red)': 'var(--red-bd)', 'var(--yellow)': 'var(--yellow-bd)', 'var(--green)': 'var(--green-bd)', 'var(--muted)': 'var(--border)' };
+  const barBg = barBgMap[nextInspColor] || 'var(--surface2)';
+  const barBd = barBdMap[nextInspColor] || 'var(--border)';
+
+  // Sertifikasi
+  let sertHtml = '';
+  if (a.tanggal_expired) {
+    const exp = new Date(a.tanggal_expired);
+    exp.setHours(0, 0, 0, 0);
+    const diffS = Math.ceil((exp - today) / 86400000);
+    const sc = diffS < 0 ? 'var(--red)' : diffS <= 60 ? 'var(--yellow)' : 'var(--green)';
+    const sb = diffS < 0 ? 'var(--red-bg)' : diffS <= 60 ? 'var(--yellow-bg)' : 'var(--green-bg)';
+    const sbd = diffS < 0 ? 'var(--red-bd)' : diffS <= 60 ? 'var(--yellow-bd)' : 'var(--green-bd)';
+    const sl = diffS < 0 ? '🔴 EXPIRED' : diffS <= 60 ? '🟡 Akan Expired (' + diffS + ' hari lagi)' : '🟢 Valid (' + diffS + ' hari lagi)';
+    sertHtml = `
+      <div style="background:${sb};border:1px solid ${sbd};border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">📋 Sertifikasi</div>
+          <span style="font-size:11px;font-weight:700;color:${sc}">${sl}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:rgba(255,255,255,.6);border-radius:8px;padding:8px 10px">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Expired</div>
+            <div style="font-size:13px;font-weight:700;color:${sc}">${formatTgl(a.tanggal_expired, false)}</div>
+          </div>
+          <div style="background:rgba(255,255,255,.6);border-radius:8px;padding:8px 10px">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">No Sertifikasi</div>
+            <div style="font-size:13px;font-weight:600">${a.no_sertifikasi || a.no_sertifikat || '—'}</div>
+          </div>
+          <div style="grid-column:span 2;background:rgba(255,255,255,.6);border-radius:8px;padding:8px 10px">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Nama Penguji / Lembaga</div>
+            <div style="font-size:13px;font-weight:600">${a.nama_penguji || '—'}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  document.getElementById('vDrawerBody').innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:700;
+        ${a.status_aset_terakhir === 'LAYAK' ? 'background:var(--green-bg);color:var(--green)' : 'background:var(--red-bg);color:var(--red)'}">
+        ${a.status_aset_terakhir === 'LAYAK' ? '✅ LAYAK' : '❌ TIDAK LAYAK'}</span>
+      <span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;
+                   background:var(--primary-light);color:var(--primary)">
+        🗂️ ${a.nama_kategori || '—'}</span>
+      ${a.no_toolbox ? `<span style="padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;
+                   background:var(--yellow-bg);color:var(--yellow)">🧰 Toolbox</span>` : ''}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      ${[
+        ['🪪 Asset ID', a.asset_id || '—', ''],
+        ['🔢 No ID', a.no_id || (a.no_toolbox ? 'TB: ' + a.no_toolbox : '—'), ''],
+        ['🏷️ Merk / Type', a.merk || '—', ''],
+        ['📍 Sub Area', a.nama_subarea || '—', ''],
+        ['📏 Spesifikasi', a.spesifikasi || '—', 'grid-column:span 2'],
+        ['🎨 Marking / Warna', a.marking || '—', ''],
+        ['🏢 Perusahaan', a.nama_perusahaan || a.company_id || '—', ''],
+      ].map(([label, val, style]) =>
+        `<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;${style}">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;
+                      letter-spacing:.3px;margin-bottom:3px">${label}</div>
+          <div style="font-size:13px;font-weight:600">${val}</div>
+        </div>`
+      ).join('')}
+    </div>
+
+    <div style="background:${barBg};border:1px solid ${barBd};border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+                  letter-spacing:.3px;margin-bottom:8px">⏱️ Jadwal Inspeksi</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="background:rgba(255,255,255,.6);border-radius:8px;padding:8px 10px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Inspeksi Terakhir</div>
+          <div style="font-size:13px;font-weight:700;color:var(--green)">
+            📅 ${a.tgl_inspeksi_terakhir ? formatTgl(a.tgl_inspeksi_terakhir, false) : 'Belum pernah'}</div>
+        </div>
+        <div style="background:rgba(255,255,255,.6);border-radius:8px;padding:8px 10px">
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Inspeksi Berikutnya</div>
+          <div style="font-size:13px;font-weight:700;color:${nextInspColor}">${nextInspLabel}</div>
+        </div>
+      </div>
+      <div style="height:8px;background:rgba(255,255,255,.5);border-radius:4px;overflow:hidden">
+        <div style="height:100%;background:${nextInspColor};border-radius:4px;width:${pct}%;transition:width .6s ease"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:10px;color:var(--muted)">
+        <span>Awal</span><span>${pct}% dari interval</span><span>Due</span>
+      </div>
+      ${a.interval_hari ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">⏱️ Interval inspeksi: <strong>${a.interval_hari} hari</strong></div>` : ''}
+    </div>
+
+    ${sertHtml}
+
+    <div style="background:var(--surface2);border-radius:10px;padding:12px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;
+                  letter-spacing:.3px;margin-bottom:8px">📋 Temuan Terkait Asset Ini</div>
+      <div id="vDrawerTemuanAsset">${vGetTemuanByAsset(a.asset_id, a.nama_alat)}</div>
+    </div>`;
+
+  const bg = document.getElementById('vAssetDrawerBg');
+  const drawer = document.getElementById('vAssetDrawer');
+  if (bg) bg.style.display = 'block';
+  if (drawer) {
+    drawer.style.display = 'block';
+    setTimeout(() => { drawer.style.transform = 'translateY(0)'; }, 10);
+  }
+}
+
+function vGetTemuanByAsset(assetId, namaAlat) {
+  const related = allTemuan.filter(t =>
+    t.asset_id === assetId ||
+    (namaAlat && (t.nama_alat || '').toLowerCase() === namaAlat.toLowerCase())
+  );
+  if (!related.length) {
+    return '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px">✅ Tidak ada temuan terkait asset ini</div>';
+  }
+  return related.slice(0, 5).map(t => {
+    const isCl = t.status_temuan === 'CLOSED';
+    return `<div style="padding:8px 10px;background:${isCl ? 'var(--green-bg)' : 'var(--red-bg)'};
+              border-radius:8px;margin-bottom:6px;border-left:3px solid ${isCl ? 'var(--green)' : 'var(--red)'}">
+        <div style="font-size:12px;font-weight:600;margin-bottom:3px">${t.pertanyaan || '—'}</div>
+        <div style="display:flex;gap:8px;font-size:11px;color:var(--muted);flex-wrap:wrap">
+          <span>${isCl ? '✅ Closed' : '🔴 Open'}</span>
+          <span>·</span>
+          <span>📅 ${t.tanggal_temuan || '—'}</span>
+          <span>·</span>
+          <span>🏢 ${t.nama_subarea || '—'}</span>
+          ${!isCl && t.due_date ? '<span>·</span><span style="color:' + (t.sla_status === 'OVERDUE' ? 'var(--red)' : 'var(--yellow)') + ';font-weight:600">Due: ' + formatTgl(t.due_date, false) + '</span>' : ''}
+        </div>
+      </div>`;
+  }).join('') + (related.length > 5 ? `<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px">+${related.length - 5} temuan lainnya</div>` : '');
+}
+
+function vCloseAssetDrawer() {
+  const drawer = document.getElementById('vAssetDrawer');
+  if (drawer) drawer.style.transform = 'translateY(100%)';
+  setTimeout(() => {
+    const bg = document.getElementById('vAssetDrawerBg');
+    if (bg) bg.style.display = 'none';
+    if (drawer) drawer.style.display = 'none';
+  }, 320);
+}
+  
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW register failed:', e));
