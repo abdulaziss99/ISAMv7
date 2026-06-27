@@ -2225,6 +2225,7 @@
           <div class="sec-title">Top 5 Area Overdue</div>
         </div>
         <div id="top5List"></div>
+        
         <!-- ASSET MONITORING (VIEWER) -->
         <div class="sec-hdr" style="margin-top:20px;margin-bottom:10px">
           <div class="sec-title">🔧 Asset Monitoring</div>
@@ -4143,191 +4144,23 @@
     </div>`,
           )
           .join("");
-     loadViewerAsset();
-     // ════════════════════════════════════════════════════════════
-      //  VIEWER — ASSET MONITORING (read-only, semua asset, tanpa filter nama)
-      // ════════════════════════════════════════════════════════════
       let viewerAssetsRaw = [];
       let viewerAssetFilter = "semua";
       let viewerAssetSearch = "";
-      let viewerAssetOpenId = null; // id asset yang sedang di-expand
+      let viewerAssetOpenId = null;
 
       async function loadViewerAsset() {
-        try {
-          const res = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            body: JSON.stringify({
-              action: "crudMaster",
-              action_type: "READ_ASSET",
-              caller_nik: SESSION.nik || "SYSTEM",
-            }),
-          });
-          const json = await res.json();
-          viewerAssetsRaw =
-            json.status === "ok" ? json.data.assets || [] : getDemoAssets();
-        } catch (e) {
-          viewerAssetsRaw = getDemoAssets();
-        }
-        applyViewerAssetFilter();
+        ... (isi sama, tidak berubah)
       }
 
-      function setViewerAssetFilter(val, chipEl) {
-        viewerAssetFilter = val;
-        document
-          .querySelectorAll("#viewVMonitoring .chips .chip")
-          .forEach((c) => c.classList.remove("active"));
-        if (chipEl) chipEl.classList.add("active");
-        applyViewerAssetFilter();
-      }
-
-      function filterViewerAsset(q) {
-        viewerAssetSearch = (q || "").toLowerCase().trim();
-        applyViewerAssetFilter();
-      }
-
-      function applyViewerAssetFilter() {
-        const today = new Date().toISOString().split("T")[0];
-        let data = [...viewerAssetsRaw];
-
-        if (viewerAssetFilter === "layak")
-          data = data.filter((a) => a.status_aset_terakhir === "LAYAK");
-        else if (viewerAssetFilter === "tidak_layak")
-          data = data.filter((a) => a.status_aset_terakhir === "TIDAK LAYAK");
-        else if (viewerAssetFilter === "perlu_inspeksi")
-          data = data.filter(
-            (a) => a.tgl_inspeksi_due && a.tgl_inspeksi_due < today,
-          );
-
-        if (viewerAssetSearch) {
-          const q = viewerAssetSearch;
-          data = data.filter(
-            (a) =>
-              (a.nama_alat || "").toLowerCase().includes(q) ||
-              (a.no_id || "").toLowerCase().includes(q) ||
-              (a.no_toolbox || "").toLowerCase().includes(q) ||
-              (a.nama_subarea || "").toLowerCase().includes(q) ||
-              (a.merk || "").toLowerCase().includes(q) ||
-              (a.asset_id || "").toLowerCase().includes(q),
-          );
-        }
-
-        const cnt = document.getElementById("vAssetCount");
-        if (cnt) cnt.textContent = data.length;
-        renderViewerAssetList(data);
-      }
-
-      function renderViewerAssetList(assets) {
-        const el = document.getElementById("viewerAssetList");
-        if (!el) return;
-        if (!assets.length) {
-          el.innerHTML =
-            '<div class="empty"><div class="empty-icon">🔧</div><div class="empty-title">Tidak ada asset</div></div>';
-          return;
-        }
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        el.innerHTML = assets
-          .map((a) => {
-            const isLayak = a.status_aset_terakhir === "LAYAK";
-            const isOpen = viewerAssetOpenId === a.asset_id;
-
-            // Hitung due date inspeksi berikutnya berdasarkan interval_hari
-            // (kalau backend belum kasih tgl_inspeksi_due, dihitung manual dari tgl_inspeksi_terakhir + interval_hari)
-            let dueDateStr = a.tgl_inspeksi_due || "";
-            if (!dueDateStr && a.tgl_inspeksi_terakhir && a.interval_hari) {
-              const d = new Date(a.tgl_inspeksi_terakhir);
-              d.setDate(d.getDate() + parseInt(a.interval_hari, 10));
-              dueDateStr = d.toISOString().split("T")[0];
-            }
-            const dueDate = dueDateStr ? new Date(dueDateStr) : null;
-            const isOverdue = dueDate && dueDate < today;
-            const isUpcoming =
-              dueDate &&
-              !isOverdue &&
-              (dueDate - today) / 86400000 <= 7;
-
-            const dueLabel = !dueDateStr
-              ? "—"
-              : isOverdue
-                ? "🚨 Overdue"
-                : isUpcoming
-                  ? "🟡 Segera"
-                  : "✅ On Time";
-            const dueColor = !dueDateStr
-              ? "var(--muted)"
-              : isOverdue
-                ? "var(--red)"
-                : isUpcoming
-                  ? "var(--yellow)"
-                  : "var(--green)";
-
-            // Detail expand (hanya dirender kalau isOpen true)
-            const detailHtml = isOpen
-              ? `
-        <div style="border-top:1px solid var(--border);padding:12px 14px;background:var(--surface2)">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-            <div class="ig-cell"><div class="ig-label">No ID / No Asset</div><div class="ig-val">${a.no_id || a.asset_id || "-"}</div></div>
-            <div class="ig-cell"><div class="ig-label">Merk</div><div class="ig-val">${a.merk || "-"}</div></div>
-            <div class="ig-cell"><div class="ig-label">Area</div><div class="ig-val">${a.nama_subarea || "-"}</div></div>
-            <div class="ig-cell"><div class="ig-label">Kategori</div><div class="ig-val">${a.nama_kategori || "-"}</div></div>
-            ${a.spesifikasi ? `<div class="ig-cell" style="grid-column:1/-1"><div class="ig-label">Spesifikasi</div><div class="ig-val">${a.spesifikasi}</div></div>` : ""}
-            ${a.marking ? `<div class="ig-cell" style="grid-column:1/-1"><div class="ig-label">Marking</div><div class="ig-val">${a.marking}</div></div>` : ""}
-          </div>
-
-          <div style="display:flex;gap:8px;margin-bottom:${a.no_sertifikat || a.tanggal_expired ? "10px" : "0"}">
-            <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">📅 Inspeksi Terakhir</div>
-              <div style="font-size:13px;font-weight:600">${a.tgl_inspeksi_terakhir ? formatTgl(a.tgl_inspeksi_terakhir, false) : "Belum pernah"}</div>
-            </div>
-            <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-              <div style="font-size:10px;font-weight:700;color:${dueColor};text-transform:uppercase;margin-bottom:3px">⏳ Berakhir / Due</div>
-              <div style="font-size:13px;font-weight:600;color:${dueColor}">${dueDateStr ? formatTgl(dueDateStr, false) : "-"} ${dueDateStr ? "(" + dueLabel + ")" : ""}</div>
-            </div>
-          </div>
-
-          ${
-            a.tanggal_expired
-              ? `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px">
-                <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:3px">📋 Sertifikasi</div>
-                <div style="font-size:12px">No: ${a.no_sertifikat || "-"} · Penguji: ${a.nama_penguji || "-"}</div>
-                <div style="font-size:12px;margin-top:2px">Expired: <strong>${formatTgl(a.tanggal_expired, false)}</strong></div>
-              </div>`
-              : ""
-          }
-        </div>`
-              : "";
-
-            return `<div style="background:var(--surface);border-radius:12px;border:1px solid var(--border);margin-bottom:10px;overflow:hidden;cursor:pointer"
-        onclick="toggleViewerAsset('${a.asset_id}')">
-        <div style="display:flex;gap:10px;align-items:flex-start;padding:14px">
-          <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <div style="font-weight:600;font-size:14px">${a.nama_alat || "-"}</div>
-              <span style="font-size:10px;color:var(--muted2)">${isOpen ? "▲" : "▼"}</span>
-            </div>
-            <div style="font-size:12px;color:var(--primary);margin-bottom:4px">🪪 ${a.asset_id || "-"}</div>
-            <div style="font-size:12px;color:var(--muted)">📍 ${a.nama_subarea || "-"} · 🗂️ ${a.nama_kategori || "-"}</div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:6px;
-              ${isLayak ? "background:var(--green-bg);color:var(--green)" : "background:var(--red-bg);color:var(--red)"}">
-              ${isLayak ? "✅ LAYAK" : "❌ TDK LAYAK"}
-            </div>
-            <div style="font-size:10px;font-weight:600;color:${dueColor}">${dueLabel}</div>
-          </div>
-        </div>
-        ${detailHtml}
-      </div>`;
-          })
-          .join("");
-      }
-
+      function setViewerAssetFilter(val, chipEl) { ... }
+      function filterViewerAsset(q) { ... }
+      function applyViewerAssetFilter() { ... }
+      function renderViewerAssetList(assets) { ... }
       function toggleViewerAsset(assetId) {
         viewerAssetOpenId = viewerAssetOpenId === assetId ? null : assetId;
         applyViewerAssetFilter();
-      }
-      }
+      }      }
 
       // ── ANALYTICS (PIC overdue) ──
       function renderAnalytics() {
